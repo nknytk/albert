@@ -33,8 +33,7 @@ from six.moves import map
 from six.moves import range
 import tensorflow.compat.v1 as tf
 from tensorflow.compat.v1 import estimator as tf_estimator
-from tensorflow.contrib import layers as contrib_layers
-from tensorflow.contrib import tpu as contrib_tpu
+from tensorflow.compat.v1.estimator import tpu as tf_tpu
 
 _PrelimPrediction = collections.namedtuple(  # pylint: disable=invalid-name
     "PrelimPrediction",
@@ -830,7 +829,7 @@ def v1_model_fn_builder(albert_config, init_checkpoint, learning_rate,
       train_op = optimization.create_optimizer(
           total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
 
-      output_spec = contrib_tpu.TPUEstimatorSpec(
+      output_spec = tf_tpu.TPUEstimatorSpec(
           mode=mode,
           loss=total_loss,
           train_op=train_op,
@@ -842,7 +841,7 @@ def v1_model_fn_builder(albert_config, init_checkpoint, learning_rate,
       }
       if unique_ids is not None:
         predictions["unique_ids"] = unique_ids
-      output_spec = contrib_tpu.TPUEstimatorSpec(
+      output_spec = tf_tpu.TPUEstimatorSpec(
           mode=mode, predictions=predictions, scaffold_fn=scaffold_fn)
     else:
       raise ValueError(
@@ -1475,7 +1474,7 @@ def create_v2_model(albert_config, is_training, input_ids, input_mask,
               albert_config.initializer_range),
           activation=tf.tanh,
           name="dense_0")
-      end_logits = contrib_layers.layer_norm(end_logits, begin_norm_axis=-1)
+      end_logits = tf.keras.layers.LayerNormalization(axis=-1)(end_logits)
 
       end_logits = tf.layers.dense(
           end_logits,
@@ -1506,7 +1505,7 @@ def create_v2_model(albert_config, is_training, input_ids, input_mask,
               albert_config.initializer_range),
           activation=tf.tanh,
           name="dense_0")
-      end_logits = contrib_layers.layer_norm(end_logits, begin_norm_axis=-1)
+      end_logits = tf.keras.layers.LayerNormalization(axis=-1)(end_logits)
       end_logits = tf.layers.dense(
           end_logits,
           1,
@@ -1665,7 +1664,7 @@ def v2_model_fn_builder(albert_config, init_checkpoint, learning_rate,
       train_op = optimization.create_optimizer(
           total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)
 
-      output_spec = contrib_tpu.TPUEstimatorSpec(
+      output_spec = tf_tpu.TPUEstimatorSpec(
           mode=mode,
           loss=total_loss,
           train_op=train_op,
@@ -1679,7 +1678,7 @@ def v2_model_fn_builder(albert_config, init_checkpoint, learning_rate,
           "end_top_log_probs": outputs["end_top_log_probs"],
           "cls_logits": outputs["cls_logits"]
       }
-      output_spec = contrib_tpu.TPUEstimatorSpec(
+      output_spec = tf_tpu.TPUEstimatorSpec(
           mode=mode, predictions=predictions, scaffold_fn=scaffold_fn)
     else:
       raise ValueError(

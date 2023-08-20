@@ -24,8 +24,8 @@ from albert import optimization
 from six.moves import range
 import tensorflow.compat.v1 as tf
 from tensorflow.compat.v1 import estimator as tf_estimator
-from tensorflow.contrib import cluster_resolver as contrib_cluster_resolver
-from tensorflow.contrib import tpu as contrib_tpu
+from tensorflow.python.distribute import cluster_resolver as tf_cluster_resolver
+from tensorflow.compat.v1.estimator import tpu as tf_tpu
 
 flags = tf.flags
 
@@ -40,6 +40,10 @@ flags.DEFINE_string(
 flags.DEFINE_string(
     "input_file", None,
     "Input TF example files (can be a glob or comma separated).")
+
+flags.DEFINE_string(
+    "compression_type", None,
+    "Compression type of input TF files (GZIP, ZLIB).")
 
 flags.DEFINE_string(
     "output_dir", None,
@@ -221,7 +225,7 @@ def model_fn_builder(albert_config, init_checkpoint, learning_rate,
           total_loss, learning_rate, num_train_steps, num_warmup_steps,
           use_tpu, optimizer, poly_power, start_warmup_step)
 
-      output_spec = contrib_tpu.TPUEstimatorSpec(
+      output_spec = tf_tpu.TPUEstimatorSpec(
           mode=mode,
           loss=total_loss,
           train_op=train_op,
@@ -278,7 +282,7 @@ def model_fn_builder(albert_config, init_checkpoint, learning_rate,
 
       eval_metrics = (metric_fn, metric_values)
 
-      output_spec = contrib_tpu.TPUEstimatorSpec(
+      output_spec = tf_tpu.TPUEstimatorSpec(
           mode=mode,
           loss=total_loss,
           eval_metrics=eval_metrics,
@@ -425,12 +429,12 @@ def input_fn_builder(input_files,
       # even more randomness to the training pipeline.
       d = d.apply(
           tf.data.experimental.parallel_interleave(
-              tf.data.TFRecordDataset,
+              lambda fname: tf.data.TFRecordDataset(fname, compression_type=FLAGS.compression_type),
               sloppy=is_training,
               cycle_length=cycle_length))
       d = d.shuffle(buffer_size=100)
     else:
-      d = tf.data.TFRecordDataset(input_files)
+      d = tf.data.TFRecordDataset(input_files, compression_type=FLAGS.compression_type)
       # Since we evaluate for a fixed number of steps we don't want to encounter
       # out-of-range exceptions.
       d = d.repeat()
@@ -486,17 +490,17 @@ def main(_):
 
   tpu_cluster_resolver = None
   if FLAGS.use_tpu and FLAGS.tpu_name:
-    tpu_cluster_resolver = contrib_cluster_resolver.TPUClusterResolver(
+    tpu_cluster_resolver = tf_cluster_resolver.TPUClusterResolver(
         FLAGS.tpu_name, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
 
-  is_per_host = contrib_tpu.InputPipelineConfig.PER_HOST_V2
-  run_config = contrib_tpu.RunConfig(
+  is_per_host = tf_tpu.InputPipelineConfig.PER_HOST_V2
+  run_config = tf_tpu.RunConfig(
       cluster=tpu_cluster_resolver,
       master=FLAGS.master,
       model_dir=FLAGS.output_dir,
       save_checkpoints_steps=FLAGS.save_checkpoints_steps,
       keep_checkpoint_max=FLAGS.keep_checkpoint_max,
-      tpu_config=contrib_tpu.TPUConfig(
+      tpu_config=tf_tpu.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_tpu_cores,
           per_host_input_for_training=is_per_host))
@@ -515,7 +519,7 @@ def main(_):
 
   # If TPU is not available, this will fall back to normal Estimator on CPU
   # or GPU.
-  estimator = contrib_tpu.TPUEstimator(
+  estimator = tf_tpu.TPUEstimator(
       use_tpu=FLAGS.use_tpu,
       model_fn=model_fn,
       config=run_config,
